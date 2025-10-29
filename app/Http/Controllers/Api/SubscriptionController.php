@@ -87,7 +87,7 @@ class SubscriptionController extends Controller
     /**
      * Get user's subscriptions
      */
-    public function getUserSubscriptions(Request $request): JsonResponse
+    public function getUserSubscriptions(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'user_id' => 'required',
