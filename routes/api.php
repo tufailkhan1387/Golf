@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\SubscriptionPlanController;
 use App\Http\Controllers\Api\SubscriptionController;
+use App\Http\Controllers\Api\SessionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -36,4 +37,10 @@ Route::prefix('subscriptions')->group(function () {
     Route::get('/user-subscriptions', [SubscriptionController::class, 'getUserSubscriptions']);
     Route::post('/cancel', [SubscriptionController::class, 'cancelSubscription']);
     Route::post('/resume', [SubscriptionController::class, 'resumeSubscription']);
+});
+
+// Session API for free trial
+Route::prefix('session')->group(function () {
+    Route::post('/free-trial', [SessionController::class, 'startFreeTrial']);
+    Route::post('/status', [SessionController::class, 'status']);
 });
