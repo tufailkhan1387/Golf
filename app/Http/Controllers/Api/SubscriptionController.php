@@ -10,6 +10,9 @@ use Stripe\Stripe;
 use Stripe\Customer;
 use Stripe\Subscription;
 use Stripe\Checkout\Session;
+use Stripe\PaymentIntent;
+use Stripe\Price;
+use Stripe\PaymentMethod;
 use Stripe\Exception\ApiErrorException;
 
 class SubscriptionController extends Controller
@@ -38,37 +41,140 @@ class SubscriptionController extends Controller
         }
 
         try {
-
-
             // Create or retrieve Stripe customer
             $customer = $this->getOrCreateStripeCustomer($request->user_id);
 
-            // Create Stripe Checkout Session
-            $session = Session::create([
+            // Get price details to calculate amount
+            $price = Price::retrieve($request->price_id);
+            $amount = $price->unit_amount; // Amount in cents
+
+            // Create Payment Intent to collect payment method for subscription
+            // Using setup_future_usage to save payment method for recurring charges
+            $paymentIntent = PaymentIntent::create([
+                'amount' => $amount,
+                'currency' => $price->currency ?? 'usd',
                 'customer' => $customer->id,
+                'setup_future_usage' => 'off_session', // Save payment method for subscription
                 'payment_method_types' => ['card'],
-                'line_items' => [[
-                    'price' => $request->price_id,
-                    'quantity' => 1,
-                ]],
-                'mode' => 'subscription',
-                'subscription_data' => [
-                    'trial_period_days' => 7, // 7-day free trial
-                ],
-                'success_url' => request()->getSchemeAndHttpHost() . '/checkout/success?session_id={CHECKOUT_SESSION_ID}',
-                'cancel_url' => request()->getSchemeAndHttpHost() . '/checkout/cancel?session_id={CHECKOUT_SESSION_ID}',
                 'metadata' => [
                     'user_id' => $request->user_id,
+                    'price_id' => $request->price_id,
                 ],
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Checkout session created successfully',
+                'message' => 'Payment intent created successfully',
                 'data' => [
-                    'checkout_url' => $session->url,
-                    'session_id' => $session->id,
+                    'client_secret' => $paymentIntent->client_secret,
+                    'payment_intent_id' => $paymentIntent->id,
+                    'customer_id' => $customer->id,
                     'user_id' => $request->user_id,
+                    'amount' => $amount / 100, // Convert cents to dollars
+                    'currency' => $price->currency ?? 'usd',
+                ]
+            ], 201);
+        } catch (ApiErrorException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Stripe API error: ' . $e->getMessage()
+            ], 500);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error creating subscription: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create subscription after payment intent is confirmed
+     */
+    public function createSubscription(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required',
+            'payment_intent_id' => 'required|string',
+            'price_id' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            // Retrieve the payment intent to get the payment method
+            $paymentIntent = PaymentIntent::retrieve($request->payment_intent_id);
+
+            if ($paymentIntent->status !== 'succeeded' && $paymentIntent->status !== 'requires_capture') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Payment intent is not in a valid state. Status: ' . $paymentIntent->status
+                ], 400);
+            }
+
+            // Get the payment method ID from the payment intent
+            $paymentMethodId = $paymentIntent->payment_method;
+            
+            if (!$paymentMethodId) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No payment method found in payment intent'
+                ], 400);
+            }
+
+            // Get or create Stripe customer
+            $customer = $this->getOrCreateStripeCustomer($request->user_id);
+
+            // Attach payment method to customer if not already attached
+            try {
+                $paymentMethod = PaymentMethod::retrieve($paymentMethodId);
+                if ($paymentMethod->customer !== $customer->id) {
+                    $paymentMethod->attach(['customer' => $customer->id]);
+                }
+            } catch (\Exception $e) {
+                // Payment method might already be attached
+            }
+
+            // Set as default payment method for the customer
+            Customer::update($customer->id, [
+                'invoice_settings' => [
+                    'default_payment_method' => $paymentMethodId,
+                ],
+            ]);
+
+            // Create subscription with the payment method
+            $subscription = Subscription::create([
+                'customer' => $customer->id,
+                'items' => [[
+                    'price' => $request->price_id,
+                ]],
+                'payment_behavior' => 'default_incomplete',
+                'payment_settings' => [
+                    'save_default_payment_method' => 'on_subscription',
+                ],
+                'expand' => ['latest_invoice.payment_intent'],
+                'trial_period_days' => 7, // 7-day free trial
+                'metadata' => [
+                    'user_id' => $request->user_id,
+                    'payment_intent_id' => $request->payment_intent_id,
+                ],
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Subscription created successfully',
+                'data' => [
+                    'subscription_id' => $subscription->id,
+                    'status' => $subscription->status,
+                    'current_period_start' => date('Y-m-d H:i:s', $subscription->current_period_start),
+                    'current_period_end' => date('Y-m-d H:i:s', $subscription->current_period_end),
+                    'trial_start' => $subscription->trial_start ? date('Y-m-d H:i:s', $subscription->trial_start) : null,
+                    'trial_end' => $subscription->trial_end ? date('Y-m-d H:i:s', $subscription->trial_end) : null,
                 ]
             ], 201);
         } catch (ApiErrorException $e) {

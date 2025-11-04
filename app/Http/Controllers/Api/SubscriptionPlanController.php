@@ -53,7 +53,7 @@ class SubscriptionPlanController extends Controller
             }
 
             return response()->json([
-                'success' => true,
+                'success' => "1",
                 'data' => $plans
             ]);
         } catch (ApiErrorException $e) {
