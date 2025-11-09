@@ -38,6 +38,13 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
+        // ✅ Determine if profile is completed
+        $profileCompleted = !(
+            empty($user->focus) ||
+            empty($user->skill) ||
+            empty($user->challenge)
+        );
+
         return response()->json([
             'status' => '1',
             'message' => 'Login successful',
@@ -46,12 +53,15 @@ class AuthController extends Controller
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
-                    'phone' => $user->phone
+                    'phone' => $user->phone,
+                    'is_tour' => $user->is_tour ?? false,
+                    'profile_completed' => $profileCompleted,
                 ],
                 'token' => $token
             ]
         ]);
     }
+
 
     public function register(Request $request)
     {
@@ -92,6 +102,67 @@ class AuthController extends Controller
                 ],
                 'token' => $token
             ]
+        ]);
+    }
+
+    public function SavePersonalizeInformationApi(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|exists:users,id',
+            'focus' => 'required|string',
+            'skill' => 'required|string',
+            'challenge' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => '0',
+                'message' => 'Validation error',
+                'data' => (object)[],
+                'errors' => $validator->errors(),
+            ]);
+        }
+
+        $user = User::find($request->user_id); // ✅ Corrected from findOne() to find()
+
+        $user->focus = $request->focus;
+        $user->skill = $request->skill;
+        $user->challenge = $request->challenge;
+        $user->save();
+
+        return response()->json([
+            'status' => '1',
+            'message' => 'Information added successfully',
+            'data' => [
+                'user' => $user,
+            ],
+        ]);
+    }
+
+    public function cancel_tour(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|exists:users,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'status' => '0',
+                'message' => 'Validation error',
+                'data' => (object)[],
+                'errors' => $validator->errors(),
+            ]);
+        }
+
+        $user = User::find($request->user_id);
+        $user->is_tour = false;
+        $user->save();
+        return response()->json([
+            'status' => '1',
+            'message' => 'Tour skipped',
+            'data' => [
+                'user' => $user,
+            ],
         ]);
     }
 }

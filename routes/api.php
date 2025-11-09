@@ -21,6 +21,9 @@ use App\Http\Controllers\Api\SessionController;
 
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
+Route::post('/SavePersonalizeInformationApi', [AuthController::class, 'SavePersonalizeInformationApi']);
+Route::post('/cancel_tour', [AuthController::class, 'cancel_tour']);
+
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
