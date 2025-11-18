@@ -27,8 +27,10 @@ Route::post('/cancel_tour', [AuthController::class, 'cancel_tour']);
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
-});
 
+    
+});
+Route::middleware('auth:sanctum')->get('/logout', [AuthController::class, 'logout']);
 // Subscription Plans API Routes
 Route::prefix('subscription-plans')->group(function () {
     Route::get('/', [SubscriptionPlanController::class, 'index']);
