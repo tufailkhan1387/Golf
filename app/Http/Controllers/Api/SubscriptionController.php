@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Subscription as LocalSubscription;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
@@ -96,6 +98,7 @@ class SubscriptionController extends Controller
             'user_id' => 'required',
             'payment_intent_id' => 'required|string',
             'price_id' => 'required|string',
+            'email' => 'required|email',
         ]);
 
         if ($validator->fails()) {
@@ -119,7 +122,7 @@ class SubscriptionController extends Controller
 
             // Get the payment method ID from the payment intent
             $paymentMethodId = $paymentIntent->payment_method;
-            
+
             if (!$paymentMethodId) {
                 return response()->json([
                     'success' => false,
@@ -165,17 +168,84 @@ class SubscriptionController extends Controller
                 ],
             ]);
 
+            // Get user email from request
+            $userEmail = $request->email;
+            $dbUserId = null;
+
+            // Try to find user by email in database
+            $user = User::where('email', $userEmail)->first();
+            if ($user) {
+                $dbUserId = $user->id;
+            }
+
+            // If user not found by email, try to find by user_id if it's a database ID
+            if (!$dbUserId && is_numeric($request->user_id)) {
+                $user = User::find($request->user_id);
+                if ($user) {
+                    $dbUserId = $user->id;
+                    // Update email if different
+                    if ($user->email !== $userEmail) {
+                        $userEmail = $user->email;
+                    }
+                }
+            }
+
+            // Update Stripe customer email if not set
+            if (!$customer->email && $userEmail) {
+                Customer::update($customer->id, [
+                    'email' => $userEmail,
+                ]);
+            }
+
+            // Determine if it's a free trial (has trial period)
+            $isFreeTrial = $subscription->trial_start !== null && $subscription->trial_end !== null;
+
+            // Save subscription to local database
+            // Only save if we have a valid database user ID
+            $localSubscription = null;
+            if ($dbUserId) {
+                $localSubscription = LocalSubscription::updateOrCreate(
+                    [
+                        'user_id' => $dbUserId,
+                        'email' => $userEmail,
+                    ],
+                    [
+                        'isFreeTrial' => $isFreeTrial,
+                        'isSubscribe' => true,
+                        'trial_started_at' => $subscription->trial_start ? date('Y-m-d H:i:s', $subscription->trial_start) : null,
+                        'trial_ends_at' => $subscription->trial_end ? date('Y-m-d H:i:s', $subscription->trial_end) : null,
+                    ]
+                );
+            }
+
+            $responseData = [
+                'subscription_id' => $subscription->id,
+                'status' => $subscription->status,
+                'current_period_start' => date('Y-m-d H:i:s', $subscription->current_period_start),
+                'current_period_end' => date('Y-m-d H:i:s', $subscription->current_period_end),
+                'trial_start' => $subscription->trial_start ? date('Y-m-d H:i:s', $subscription->trial_start) : null,
+                'trial_end' => $subscription->trial_end ? date('Y-m-d H:i:s', $subscription->trial_end) : null,
+            ];
+
+            // Add local subscription data if saved
+            if ($localSubscription) {
+                $responseData['local_subscription'] = [
+                    'id' => $localSubscription->id,
+                    'user_id' => $localSubscription->user_id,
+                    'email' => $localSubscription->email,
+                    'isFreeTrial' => $localSubscription->isFreeTrial,
+                    'isSubscribe' => $localSubscription->isSubscribe,
+                    'trial_started_at' => $localSubscription->trial_started_at ? $localSubscription->trial_started_at->format('Y-m-d H:i:s') : null,
+                    'trial_ends_at' => $localSubscription->trial_ends_at ? $localSubscription->trial_ends_at->format('Y-m-d H:i:s') : null,
+                ];
+            } else {
+                $responseData['warning'] = 'Subscription created in Stripe but not saved to local database. User not found in database.';
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Subscription created successfully',
-                'data' => [
-                    'subscription_id' => $subscription->id,
-                    'status' => $subscription->status,
-                    'current_period_start' => date('Y-m-d H:i:s', $subscription->current_period_start),
-                    'current_period_end' => date('Y-m-d H:i:s', $subscription->current_period_end),
-                    'trial_start' => $subscription->trial_start ? date('Y-m-d H:i:s', $subscription->trial_start) : null,
-                    'trial_end' => $subscription->trial_end ? date('Y-m-d H:i:s', $subscription->trial_end) : null,
-                ]
+                'message' => $localSubscription ? 'Subscription created and assigned to user successfully' : 'Subscription created successfully (user not found in local database)',
+                'data' => $responseData,
             ], 201);
         } catch (ApiErrorException $e) {
             return response()->json([
