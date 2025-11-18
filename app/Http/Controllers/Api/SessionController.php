@@ -7,36 +7,39 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Carbon;
 use App\Models\Subscription;
+use Illuminate\Support\Facades\Auth;
 
 class SessionController extends Controller
 {
     /**
      * Start a 7-day free trial for a user.
      */
+
     public function startFreeTrial(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'user_id' => 'required|integer',
-            'email' => 'required|email',
-        ]);
+        // Get the authenticated user
+        $user = Auth::user();
 
-        if ($validator->fails()) {
+        // Ensure the user is authenticated
+        if (!$user) {
             return response()->json([
                 'success' => false,
-                'message' => 'Validation error',
-                'errors' => $validator->errors(),
-            ], 422);
+                'message' => 'User not authenticated.',
+                'data' => (object)[]
+            ], 401); // Unauthorized
         }
 
+        // Current time and the trial end time (7 days from now)
         $now = Carbon::now();
         $endsAt = $now->copy()->addDays(7);
 
+        // Retrieve or create the subscription record for the user
         $subscription = Subscription::firstOrNew([
-            'user_id' => $request->user_id,
-            'email' => $request->email,
+            'user_id' => $user->id,
+            'email' => $user->email,
         ]);
 
-        // If existing and trial active but expired, reset
+        // Check if trial is expired and reset if necessary
         if ($subscription->exists && $subscription->trial_ends_at && $now->greaterThan($subscription->trial_ends_at)) {
             $subscription->isFreeTrial = false;
             $subscription->isSubscribe = false;
@@ -55,17 +58,19 @@ class SessionController extends Controller
                     'trial_started_at' => $subscription->trial_started_at,
                     'trial_ends_at' => $subscription->trial_ends_at,
                 ],
-            ]);
+            ], 200); // OK status
         }
 
-        $subscription->user_id = $request->user_id;
-        $subscription->email = $request->email;
+        // Set new trial values
+        $subscription->user_id = $user->id;
+        $subscription->email = $user->email;
         $subscription->isFreeTrial = true;
         $subscription->isSubscribe = true;
         $subscription->trial_started_at = $now;
         $subscription->trial_ends_at = $endsAt;
         $subscription->save();
 
+        // Return the response
         return response()->json([
             'success' => true,
             'message' => 'Free trial started for 7 days',
@@ -77,8 +82,10 @@ class SessionController extends Controller
                 'trial_started_at' => $subscription->trial_started_at,
                 'trial_ends_at' => $subscription->trial_ends_at,
             ],
-        ], 201);
+        ], 201); // Created status
     }
+
+
 
     /**
      * Get session status; if free trial expired, deactivate flags.
@@ -142,5 +149,3 @@ class SessionController extends Controller
         ]);
     }
 }
-
-

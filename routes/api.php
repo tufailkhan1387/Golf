@@ -27,10 +27,20 @@ Route::post('/cancel_tour', [AuthController::class, 'cancel_tour']);
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
-
-    
 });
-Route::middleware('auth:sanctum')->get('/logout', [AuthController::class, 'logout']);
+
+
+Route::middleware('auth:sanctum')->group(function () {
+    // Logout route
+    Route::get('/logout', [AuthController::class, 'logout']);
+
+    // Session routes
+    Route::prefix('session')->group(function () {
+        Route::post('/free-trial', [SessionController::class, 'startFreeTrial']);
+        Route::post('/status', [SessionController::class, 'status']);
+    });
+});
+
 // Subscription Plans API Routes
 Route::prefix('subscription-plans')->group(function () {
     Route::get('/', [SubscriptionPlanController::class, 'index']);
@@ -51,7 +61,3 @@ Route::prefix('subscriptions')->group(function () {
 });
 
 // Session API for free trial
-Route::prefix('session')->group(function () {
-    Route::post('/free-trial', [SessionController::class, 'startFreeTrial']);
-    Route::post('/status', [SessionController::class, 'status']);
-});
