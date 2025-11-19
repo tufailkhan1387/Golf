@@ -92,21 +92,11 @@ class SessionController extends Controller
      */
     public function status(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'user_id' => 'required|integer',
-            'email' => 'required|email',
-        ]);
+        $user = auth()->user();
 
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation error',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
-        $subscription = Subscription::where('user_id', $request->user_id)
-            ->where('email', $request->email)
+        // Fetch subscription using authenticated user's ID & email
+        $subscription = Subscription::where('user_id', $user->id)
+            ->where('email', $user->email)
             ->first();
 
         if (!$subscription) {
@@ -114,8 +104,8 @@ class SessionController extends Controller
                 'success' => true,
                 'message' => 'No subscription found',
                 'data' => [
-                    'user_id' => (int) $request->user_id,
-                    'email' => $request->email,
+                    'user_id' => (int) $user->id,
+                    'email' => $user->email,
                     'isFreeTrial' => false,
                     'isSubscribe' => false,
                     'trial_started_at' => null,
@@ -128,6 +118,7 @@ class SessionController extends Controller
         $now = Carbon::now();
         $expired = $subscription->trial_ends_at && $now->greaterThan($subscription->trial_ends_at);
 
+        // If expired, remove trial/subscribe flags
         if ($expired && ($subscription->isFreeTrial || $subscription->isSubscribe)) {
             $subscription->isFreeTrial = false;
             $subscription->isSubscribe = false;
