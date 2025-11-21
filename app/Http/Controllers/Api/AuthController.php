@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -177,6 +178,19 @@ class AuthController extends Controller
         return response()->json([
             'status' => '1',
             'message' => 'Tour skipped',
+            'data' => [
+                'user' => $user,
+            ],
+        ]);
+    }
+    public function get_profile(Request $request)
+    {
+       
+        $user = Auth::user();
+       
+        return response()->json([
+            'status' => '1',
+            'message' => 'User Data',
             'data' => [
                 'user' => $user,
             ],

@@ -33,6 +33,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::middleware('auth:sanctum')->group(function () {
     // Logout route
     Route::get('/logout', [AuthController::class, 'logout']);
+    Route::get('/get_profile', [AuthController::class, 'get_profile']);
 
     // Session routes
     Route::prefix('session')->group(function () {
