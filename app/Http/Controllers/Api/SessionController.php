@@ -106,6 +106,7 @@ class SessionController extends Controller
                 'data' => [
                     'user_id' => (int) $user->id,
                     'email' => $user->email,
+                    'is_tour' => $user->is_tour ?? false,
                     'isFreeTrial' => false,
                     'isSubscribe' => false,
                     'trial_started_at' => null,
@@ -132,6 +133,7 @@ class SessionController extends Controller
                 'user_id' => $subscription->user_id,
                 'email' => $subscription->email,
                 'isFreeTrial' => $subscription->isFreeTrial,
+                'is_tour' => $user->is_tour ?? false,
                 'isSubscribe' => $subscription->isSubscribe,
                 'trial_started_at' => $subscription->trial_started_at,
                 'trial_ends_at' => $subscription->trial_ends_at,

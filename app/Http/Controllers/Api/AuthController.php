@@ -126,6 +126,7 @@ class AuthController extends Controller
             'user_id' => 'required|exists:users,id',
             'focus' => 'required|string',
             'skill' => 'required|string',
+            'fName' => 'required|string',
             'challenge' => 'required|string',
         ]);
 
@@ -142,6 +143,7 @@ class AuthController extends Controller
 
         $user->focus = $request->focus;
         $user->skill = $request->skill;
+        $user->fName = $request->fName;
         $user->challenge = $request->challenge;
         $user->save();
 
