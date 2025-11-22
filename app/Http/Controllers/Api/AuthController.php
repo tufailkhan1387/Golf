@@ -100,7 +100,7 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'is_tour'=>true,
+            'is_tour'=>false,
             // 'phone' => $request->phone,
             'password' => Hash::make($request->password)
         ]);
@@ -174,7 +174,7 @@ class AuthController extends Controller
         }
 
         $user = User::find($request->user_id);
-        $user->is_tour = false;
+        $user->is_tour = true;
         $user->save();
         return response()->json([
             'status' => '1',
