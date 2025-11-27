@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use App\Models\Subscription;
+
 
 class AuthController extends Controller
 {
@@ -46,9 +49,49 @@ class AuthController extends Controller
             empty($user->challenge)
         );
 
+
+
+        // Fetch subscription using authenticated user's ID & email
+        $subscription = Subscription::where('user_id', $user->id)
+            ->where('email', $user->email)
+            ->first();
+
+        if (!$subscription) {
+            return response()->json([
+                'success' => true,
+                'message' => 'No subscription found',
+                'data' => [
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'phone' => $user->phone,
+                        'is_tour' => $user->is_tour ?? false,
+                        'profile_completed' => $profileCompleted,
+                        'is_tour' => $user->is_tour ?? false,
+                        'isFreeTrial' => false,
+                        'isSubscribe' => false,
+                        'trial_started_at' => null,
+                        'trial_ends_at' => null,
+                        'expired' => false,
+                    ],
+                    'token' => $token
+                ],
+            ]);
+        }
+        $now = Carbon::now();
+        $expired = $subscription->trial_ends_at && $now->greaterThan($subscription->trial_ends_at);
+
+        // If expired, remove trial/subscribe flags
+        if ($expired && ($subscription->isFreeTrial || $subscription->isSubscribe)) {
+            $subscription->isFreeTrial = false;
+            $subscription->isSubscribe = false;
+            $subscription->save();
+        }
+
         return response()->json([
-            'status' => '1',
-            'message' => 'Login successful',
+            'success' => true,
+            'message' => $expired ? 'Free trial expired' : 'Session status fetched',
             'data' => [
                 'user' => [
                     'id' => $user->id,
@@ -57,9 +100,26 @@ class AuthController extends Controller
                     'phone' => $user->phone,
                     'is_tour' => $user->is_tour ?? false,
                     'profile_completed' => $profileCompleted,
+                    'is_tour' => $user->is_tour ?? false,
+                    'isFreeTrial' => $subscription->isFreeTrial,
+                    'is_tour' => $user->is_tour ?? false,
+                    'isSubscribe' => $subscription->isSubscribe,
+                    'trial_started_at' => $subscription->trial_started_at,
+                    'trial_ends_at' => $subscription->trial_ends_at,
+                    'expired' => $expired,
                 ],
                 'token' => $token
-            ]
+            ],
+            'data' => [
+                'user_id' => $subscription->user_id,
+                'email' => $subscription->email,
+                'isFreeTrial' => $subscription->isFreeTrial,
+                'is_tour' => $user->is_tour ?? false,
+                'isSubscribe' => $subscription->isSubscribe,
+                'trial_started_at' => $subscription->trial_started_at,
+                'trial_ends_at' => $subscription->trial_ends_at,
+                'expired' => $expired,
+            ],
         ]);
     }
     public function logout(Request $request)
@@ -100,7 +160,7 @@ class AuthController extends Controller
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'is_tour'=>false,
+            'is_tour' => false,
             // 'phone' => $request->phone,
             'password' => Hash::make($request->password)
         ]);
@@ -186,9 +246,9 @@ class AuthController extends Controller
     }
     public function get_profile(Request $request)
     {
-       
+
         $user = Auth::user();
-       
+
         return response()->json([
             'status' => '1',
             'message' => 'User Data',
