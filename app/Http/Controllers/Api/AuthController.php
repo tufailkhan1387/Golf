@@ -24,7 +24,7 @@ class AuthController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'status' => '0',
+                'status' => 0,
                 'message' => 'Validation error',
                 'data' => (object)[]
             ]);
@@ -34,7 +34,7 @@ class AuthController extends Controller
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
-                'status' => '0',
+                'status' => 0,
                 'message' => 'Invalid credentials',
                 'data' => (object)[]
             ]);
@@ -42,20 +42,19 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        // ✅ Determine if profile is completed
+        // Profile completion check
         $profileCompleted = !(
             empty($user->focus) ||
             empty($user->skill) ||
             empty($user->challenge)
         );
 
-
-
-        // Fetch subscription using authenticated user's ID & email
+        // Fetch subscription
         $subscription = Subscription::where('user_id', $user->id)
             ->where('email', $user->email)
             ->first();
 
+        // If no subscription
         if (!$subscription) {
             return response()->json([
                 'success' => true,
@@ -68,7 +67,6 @@ class AuthController extends Controller
                         'phone' => $user->phone,
                         'is_tour' => $user->is_tour ?? false,
                         'profile_completed' => $profileCompleted,
-                        'is_tour' => $user->is_tour ?? false,
                         'isFreeTrial' => false,
                         'isSubscribe' => false,
                         'trial_started_at' => null,
@@ -76,13 +74,15 @@ class AuthController extends Controller
                         'expired' => false,
                     ],
                     'token' => $token
-                ],
+                ]
             ]);
         }
+
+        // Subscription found → check expiry
         $now = Carbon::now();
         $expired = $subscription->trial_ends_at && $now->greaterThan($subscription->trial_ends_at);
 
-        // If expired, remove trial/subscribe flags
+        // Disable flags if expired
         if ($expired && ($subscription->isFreeTrial || $subscription->isSubscribe)) {
             $subscription->isFreeTrial = false;
             $subscription->isSubscribe = false;
@@ -100,28 +100,17 @@ class AuthController extends Controller
                     'phone' => $user->phone,
                     'is_tour' => $user->is_tour ?? false,
                     'profile_completed' => $profileCompleted,
-                    'is_tour' => $user->is_tour ?? false,
                     'isFreeTrial' => $subscription->isFreeTrial,
-                    'is_tour' => $user->is_tour ?? false,
                     'isSubscribe' => $subscription->isSubscribe,
                     'trial_started_at' => $subscription->trial_started_at,
                     'trial_ends_at' => $subscription->trial_ends_at,
                     'expired' => $expired,
                 ],
                 'token' => $token
-            ],
-            'data' => [
-                'user_id' => $subscription->user_id,
-                'email' => $subscription->email,
-                'isFreeTrial' => $subscription->isFreeTrial,
-                'is_tour' => $user->is_tour ?? false,
-                'isSubscribe' => $subscription->isSubscribe,
-                'trial_started_at' => $subscription->trial_started_at,
-                'trial_ends_at' => $subscription->trial_ends_at,
-                'expired' => $expired,
-            ],
+            ]
         ]);
     }
+
     public function logout(Request $request)
     {
         $user = $request->user();
