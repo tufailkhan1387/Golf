@@ -57,7 +57,7 @@ class AuthController extends Controller
         // If no subscription
         if (!$subscription) {
             return response()->json([
-                'success' => '1',
+                'status' => '1',
                 'message' => 'No subscription found',
                 'data' => [
                     'user' => [
@@ -90,7 +90,7 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'success' => '1',
+            'status' => '1',
             'message' => $expired ? 'Free trial expired' : 'Session status fetched',
             'data' => [
                 'user' => [
