@@ -24,7 +24,7 @@ class AuthController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'status' => 0,
+                'status' =>'0',
                 'message' => 'Validation error',
                 'data' => (object)[]
             ]);
@@ -34,7 +34,7 @@ class AuthController extends Controller
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
-                'status' => 0,
+                'status' => '0',
                 'message' => 'Invalid credentials',
                 'data' => (object)[]
             ]);
@@ -57,7 +57,7 @@ class AuthController extends Controller
         // If no subscription
         if (!$subscription) {
             return response()->json([
-                'success' => true,
+                'success' => '1',
                 'message' => 'No subscription found',
                 'data' => [
                     'user' => [
@@ -90,7 +90,7 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'success' => true,
+            'success' => '1',
             'message' => $expired ? 'Free trial expired' : 'Session status fetched',
             'data' => [
                 'user' => [
