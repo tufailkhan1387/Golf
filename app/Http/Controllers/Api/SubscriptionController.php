@@ -14,6 +14,7 @@ use Stripe\Subscription;
 use Stripe\Checkout\Session;
 use Stripe\PaymentIntent;
 use Stripe\Price;
+use Stripe\Product;
 use Stripe\PaymentMethod;
 use Stripe\Exception\ApiErrorException;
 
@@ -261,7 +262,7 @@ class SubscriptionController extends Controller
     }
 
     /**
-     * Get user's subscriptions
+     * Get user's subscription (single active subscription)
      */
     public function getUserSubscriptions(Request $request)
     {
@@ -284,33 +285,89 @@ class SubscriptionController extends Controller
             if (!$customer) {
                 return response()->json([
                     'success' => true,
-                    'data' => []
+                    'data' => null,
+                    'message' => 'No subscription found'
                 ]);
             }
 
-            // Get subscriptions
+            // Get active subscriptions (user can only have one active subscription)
             $subscriptions = Subscription::all([
                 'customer' => $customer->id,
-                'status' => 'all',
+                'status' => 'active',
+                'limit' => 1,
             ]);
 
-            $subscriptionData = [];
-            foreach ($subscriptions->data as $subscription) {
-                $subscriptionData[] = [
-                    'id' => $subscription->id,
-                    'status' => $subscription->status,
-                    'current_period_start' => date('Y-m-d H:i:s', $subscription->current_period_start),
-                    'current_period_end' => date('Y-m-d H:i:s', $subscription->current_period_end),
-                    'trial_start' => $subscription->trial_start ? date('Y-m-d H:i:s', $subscription->trial_start) : null,
-                    'trial_end' => $subscription->trial_end ? date('Y-m-d H:i:s', $subscription->trial_end) : null,
-                    'cancel_at_period_end' => $subscription->cancel_at_period_end,
-                    'created_at' => date('Y-m-d H:i:s', $subscription->created),
-                ];
+            // If no active subscription, check for trialing or past_due
+            if (empty($subscriptions->data)) {
+                $subscriptions = Subscription::all([
+                    'customer' => $customer->id,
+                    'status' => 'trialing',
+                    'limit' => 1,
+                ]);
             }
+
+            if (empty($subscriptions->data)) {
+                $subscriptions = Subscription::all([
+                    'customer' => $customer->id,
+                    'status' => 'past_due',
+                    'limit' => 1,
+                ]);
+            }
+
+            // If still no subscription found, return null
+            if (empty($subscriptions->data)) {
+                return response()->json([
+                    'success' => true,
+                    'data' => null,
+                    'message' => 'No active subscription found'
+                ]);
+            }
+
+            // Get the first (and only) subscription
+            $subscription = $subscriptions->data[0];
+
+            // Get the price ID from subscription items
+            $priceId = null;
+            if (!empty($subscription->items->data)) {
+                $priceId = $subscription->items->data[0]->price->id;
+            }
+
+            // If no price ID found, return basic subscription info
+            if (!$priceId) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'start_date' => date('Y-m-d H:i:s', $subscription->current_period_start),
+                        'end_date' => date('Y-m-d H:i:s', $subscription->current_period_end),
+                        'status' => $subscription->status,
+                    ]
+                ]);
+            }
+
+            // Retrieve price and product details from Stripe
+            $price = Price::retrieve($priceId);
+            $product = Product::retrieve($price->product);
+
+            // Build subscription plan data
+            $planData = [
+                'id' => $price->id,
+                'product_id' => $product->id,
+                'name' => $product->name,
+                'description' => $product->description ?? '',
+                'amount' => $price->unit_amount / 100, // Convert cents to dollars
+                'currency' => $price->currency,
+                'interval' => $price->recurring->interval ?? 'month',
+                'trial_days' => 7,
+                'active' => $price->active,
+                'popular' => isset($product->metadata->popular) && $product->metadata->popular === 'true',
+                'created_at' => date('Y-m-d H:i:s', $price->created),
+                'start_date' => date('Y-m-d H:i:s', $subscription->current_period_start),
+                'end_date' => date('Y-m-d H:i:s', $subscription->current_period_end),
+            ];
 
             return response()->json([
                 'success' => true,
-                'data' => $subscriptionData
+                'data' => $planData
             ]);
         } catch (ApiErrorException $e) {
             return response()->json([
@@ -320,7 +377,7 @@ class SubscriptionController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error fetching subscriptions: ' . $e->getMessage()
+                'message' => 'Error fetching subscription: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -419,8 +476,8 @@ class SubscriptionController extends Controller
                     'subscription_id' => $subscription->id,
                     'status' => $subscription->status,
                     'cancel_at_period_end' => $subscription->cancel_at_period_end,
-                    'current_period_end' => $subscription->current_period_end 
-                        ? date('Y-m-d H:i:s', $subscription->current_period_end) 
+                    'current_period_end' => $subscription->current_period_end
+                        ? date('Y-m-d H:i:s', $subscription->current_period_end)
                         : null,
                 ]
             ]);
