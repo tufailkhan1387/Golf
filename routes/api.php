@@ -56,7 +56,7 @@ Route::prefix('subscription-plans')->group(function () {
 Route::prefix('subscriptions')->group(function () {
     Route::post('/subscribe', [SubscriptionController::class, 'subscribe']);
     Route::post('/create', [SubscriptionController::class, 'createSubscription']);
-    Route::get('/user-subscriptions', [SubscriptionController::class, 'getUserSubscriptions']);
+    Route::post('/user-subscriptions', [SubscriptionController::class, 'getUserSubscriptions']);
     Route::post('/cancel', [SubscriptionController::class, 'cancelSubscription']);
     Route::post('/resume', [SubscriptionController::class, 'resumeSubscription']);
 });

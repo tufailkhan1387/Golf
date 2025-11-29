@@ -331,9 +331,8 @@ class SubscriptionController extends Controller
     public function cancelSubscription(Request $request): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|integer|exists:users,id',
+            'user_id' => 'required',
             'subscription_id' => 'required|string',
-            'cancel_at_period_end' => 'boolean',
         ]);
 
         if ($validator->fails()) {
@@ -345,19 +344,84 @@ class SubscriptionController extends Controller
         }
 
         try {
+            // Get Stripe customer for Firebase user
+            $customer = $this->getStripeCustomer($request->user_id);
+
+            if (!$customer) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Customer not found for this user'
+                ], 404);
+            }
+
+            // Retrieve the subscription
             $subscription = Subscription::retrieve($request->subscription_id);
 
-            // Cancel the subscription
-            $subscription->cancel_at_period_end = $request->cancel_at_period_end ?? true;
+            // Verify the subscription belongs to the customer
+            if ($subscription->customer !== $customer->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subscription does not belong to this user'
+                ], 403);
+            }
+
+            // Check if subscription is already cancelled or inactive
+            if (in_array($subscription->status, ['canceled', 'unpaid', 'incomplete_expired'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Subscription is already cancelled or inactive',
+                    'data' => [
+                        'subscription_id' => $subscription->id,
+                        'status' => $subscription->status,
+                    ]
+                ], 400);
+            }
+
+            // Cancel at period end (standard practice - user keeps access until period ends)
+            $subscription->cancel_at_period_end = true;
             $subscription->save();
+
+            // Update local database subscription record
+            $dbUserId = null;
+            $userEmail = null;
+
+            // Try to find user by email or user_id
+            if (is_numeric($request->user_id)) {
+                $user = User::find($request->user_id);
+                if ($user) {
+                    $dbUserId = $user->id;
+                    $userEmail = $user->email;
+                }
+            } else {
+                // For Firebase user IDs, try to find by email from Stripe customer
+                if ($customer->email) {
+                    $user = User::where('email', $customer->email)->first();
+                    if ($user) {
+                        $dbUserId = $user->id;
+                        $userEmail = $user->email;
+                    }
+                }
+            }
+
+            // Update local subscription if user found
+            if ($dbUserId && $userEmail) {
+                LocalSubscription::where('user_id', $dbUserId)
+                    ->where('email', $userEmail)
+                    ->update([
+                        'isSubscribe' => false,
+                    ]);
+            }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Subscription cancelled successfully',
+                'message' => 'Subscription will be cancelled at the end of the current period',
                 'data' => [
                     'subscription_id' => $subscription->id,
                     'status' => $subscription->status,
                     'cancel_at_period_end' => $subscription->cancel_at_period_end,
+                    'current_period_end' => $subscription->current_period_end 
+                        ? date('Y-m-d H:i:s', $subscription->current_period_end) 
+                        : null,
                 ]
             ]);
         } catch (ApiErrorException $e) {
