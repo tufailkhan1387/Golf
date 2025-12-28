@@ -848,6 +848,9 @@
             <h2 class="section-title">Why Choose Auto Golf?</h2>
             <p class="section-subtitle">Everything you need to improve your golf game in one place</p>
             
+
+
+            
             <div class="row">
                 <div class="col-lg-4 col-md-6">
                     <div class="feature-card">
