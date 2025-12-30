@@ -46,12 +46,12 @@
                                     Select User (with device token)
                                 </label>
                             </div>
-                            {{-- <div class="form-check">
+                            <div class="form-check">
                                 <input class="form-check-input" type="radio" name="recipient_method" id="method_token" value="token" onchange="toggleRecipientMethod()">
                                 <label class="form-check-label" for="method_token">
                                     Enter Device Token Manually
                                 </label>
-                            </div> --}}
+                            </div>
                         </div>
 
                         <!-- User Selection (Method 1) -->
