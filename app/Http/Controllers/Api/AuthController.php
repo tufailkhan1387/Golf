@@ -45,6 +45,12 @@ class AuthController extends Controller
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
+        // Save device_token if provided
+        if (!empty($request->device_token)) {
+            $user->device_token = $request->device_token;
+            $user->save();
+        }
+
         // Profile completion check
         $profileCompleted = !(
             empty($user->focus) ||
