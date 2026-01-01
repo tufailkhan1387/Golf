@@ -51,6 +51,26 @@ class AuthController extends Controller
             $user->save();
         }
 
+        // Send login notification if device_token is available
+        $deviceTokenToUse = $request->device_token ?? $user->device_token;
+        if (!empty($deviceTokenToUse)) {
+            try {
+                $firebaseService = new FirebaseNotificationService();
+                $firebaseService->sendNotification(
+                    $deviceTokenToUse,
+                    'Welcome Back! 🎯',
+                    "Hi {$user->name}, welcome back to Auto Golf! We're glad to have you here again.",
+                    [
+                        'type' => 'login',
+                        'action' => 'user_logged_in',
+                    ]
+                );
+            } catch (\Exception $e) {
+                // Log error but don't fail login
+                Log::error('Failed to send login notification: ' . $e->getMessage());
+            }
+        }
+
         // Profile completion check
         $profileCompleted = !(
             empty($user->focus) ||
